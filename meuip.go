@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-martini/martini"
 )
@@ -19,8 +22,20 @@ func main() {
 	m := martini.Classic()
 
 	m.Get("/", GetMyIP)
-	m.Get("/:name", GetRegisteredIP)
-	m.Post("/:name/:key", RegisterMyIP)
+	m.Group("/(?P<name>[a-zA-Z]{3,})", func(r martini.Router) {
+		m.Get("", GetRegisteredIP)
+		m.Post("/:key", RegisterMyIP)
+	})
+
+	m.Group("/r/(?P<name>[a-zA-Z]{3,})", func(r martini.Router) {
+		m.Any("", ProxyToRegisteredIP)
+		m.Any("/**", ProxyToRegisteredIP)
+	})
+
+	m.Group("/r/(?P<name>[a-zA-Z]{3,}):(?P<port>[0-9]+)", func(r martini.Router) {
+		m.Any("", ProxyToRegisteredIP)
+		m.Any("/**", ProxyToRegisteredIP)
+	})
 
 	m.Run()
 }
@@ -37,6 +52,68 @@ func GetRegisteredIP(r *http.Request, p martini.Params) (int, string) {
 	}
 
 	return http.StatusNotFound, "Not found"
+}
+
+func ProxyToRegisteredIP(r *http.Request, p martini.Params) (int, string) {
+	name := p["name"]
+	registeredIP, exists := registered[name]
+
+	if !exists {
+		return http.StatusNotFound, "Not found. " + name + " is not currently registered."
+	}
+
+	port := p["port"]
+	if port == "" {
+		port = "80"
+	}
+	restoUrl := p["_1"]
+
+	tr := &http.Transport{}
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   time.Second * 3,
+	}
+
+	req, err := http.NewRequest(
+		r.Method,
+		fmt.Sprintf(
+			"http://%s:%s/%s",
+			registeredIP.LastIP,
+			port,
+			restoUrl,
+		),
+		r.Body,
+	)
+
+	req.URL.RawQuery = r.URL.RawQuery
+
+	req.ContentLength = r.ContentLength
+	req.Form = r.Form
+	req.Header = r.Header
+	req.MultipartForm = r.MultipartForm
+	req.PostForm = r.PostForm
+	req.Proto = r.Proto
+	req.ProtoMajor = r.ProtoMajor
+	req.ProtoMinor = r.ProtoMinor
+	req.TLS = r.TLS
+	req.Trailer = r.Trailer
+	req.TransferEncoding = r.TransferEncoding
+
+	if err != nil {
+		return http.StatusInternalServerError, "Internal Server Error"
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return http.StatusInternalServerError, "Internal Server Error. Hmm... Host is offline?"
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return http.StatusInternalServerError, "Internal Server Error"
+	}
+
+	return resp.StatusCode, string(b)
 }
 
 func RegisterMyIP(r *http.Request, p martini.Params) (int, string) {

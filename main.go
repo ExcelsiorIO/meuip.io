@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -143,7 +144,17 @@ func NewRegister(name, key, lastip string) *Register {
 	}
 }
 
+const HeaderXForwardedFor = "X-Forwarded-For"
+const HeaderXRealIP = "X-Real-IP"
+
 func GetIPFromRequest(r *http.Request) string {
-	hostPort := strings.Split(r.RemoteAddr, ":")
-	return hostPort[0]
+	ra := r.RemoteAddr
+	if ip := r.Header.Get(HeaderXForwardedFor); ip != "" {
+		ra = strings.Split(ip, ", ")[0]
+	} else if ip := r.Header.Get(HeaderXRealIP); ip != "" {
+		ra = ip
+	} else {
+		ra, _, _ = net.SplitHostPort(ra)
+	}
+	return ra
 }

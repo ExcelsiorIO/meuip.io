@@ -26,6 +26,7 @@ func main() {
 	m.Group("/(?P<name>[a-zA-Z]{3,})", func(r martini.Router) {
 		m.Get("", GetRegisteredIP)
 		m.Post("/:key", RegisterMyIP)
+		m.Delete("/:key", DeleteMyIP)
 	})
 
 	m.Group("/r/(?P<name>[a-zA-Z]{3,})", func(r martini.Router) {
@@ -122,7 +123,6 @@ func RegisterMyIP(r *http.Request, p martini.Params) (int, string) {
 	key := p["key"]
 
 	reg, exists := registered[name]
-
 	if exists && reg.Key != key {
 		return http.StatusBadRequest, "Bad key"
 	}
@@ -131,6 +131,22 @@ func RegisterMyIP(r *http.Request, p martini.Params) (int, string) {
 		reg.LastIP = GetIPFromRequest(r)
 	} else {
 		registered[name] = NewRegister(name, key, GetIPFromRequest(r))
+	}
+
+	return http.StatusOK, "Success!"
+}
+
+func DeleteMyIP(r *http.Request, p martini.Params) (int, string) {
+	name := p["name"]
+	key := p["key"]
+
+	reg, exists := registered[name]
+	if exists && reg.Key != key {
+		return http.StatusBadRequest, "Bad key"
+	}
+
+	if exists {
+		delete(registered, name)
 	}
 
 	return http.StatusOK, "Success!"

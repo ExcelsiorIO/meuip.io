@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 func main() {
@@ -15,6 +16,7 @@ func main() {
 	flag.Parse()
 
 	e := echo.New()
+	e.Use(middleware.Logger())
 	e.GET("/", ipHandler)
 	e.GET("/debug", debugHandler)
 
